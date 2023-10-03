@@ -36,7 +36,11 @@ export class LightController extends Controller {
     const attr = this.stateObj.attributes;
     switch (this.attribute) {
       case "color_temp":
-        return Math.round(attr.color_temp_kelvin);
+        if (attr.color_temp_kelvin)
+          return Math.round(attr.color_temp_kelvin);
+        if (attr.rgb_color)
+          return this.colorTempFromRgb(attr.rgb_color)
+        return this.min;
       case "color_temp_mired":
         return Math.round(attr.color_temp);
       case "white_value":
@@ -85,9 +89,9 @@ export class LightController extends Controller {
   get _min() {
     switch (this.attribute) {
       case "color_temp":
-        return this.stateObj
+        return this.stateObj?.attributes?.min_color_temp_kelvin
           ? this.stateObj.attributes.min_color_temp_kelvin
-          : 0;
+          : 2700;
       case "color_temp_mired":
         return this.stateObj ? this.stateObj.attributes.min_mireds : 0;
       default:
@@ -97,9 +101,9 @@ export class LightController extends Controller {
   get _max() {
     switch (this.attribute) {
       case "color_temp":
-        return this.stateObj
+        return this.stateObj?.attributes?.max_color_temp_kelvin
           ? this.stateObj.attributes.max_color_temp_kelvin
-          : 0;
+          : 6500;
       case "color_temp_mired":
         return this.stateObj ? this.stateObj.attributes.max_mireds : 0;
       case "red":
@@ -123,6 +127,28 @@ export class LightController extends Controller {
 
   get isOff() {
     return this.stateObj.state !== "on";
+  }
+
+  rgbFromColorTemp(temp: number) {
+    let minTemp = this.min;
+    let maxTemp = this.max;
+
+    let factor = Math.max(0, Math.min(1, (temp - minTemp) / (maxTemp - minTemp)));
+    let red = Math.round((1 - factor) * 255);
+    let blue = Math.round(factor * 255);
+
+    return [red, 0, blue];
+  }
+
+  colorTempFromRgb(rgb: number) {
+    let minTemp = this.min;
+    let maxTemp = this.max;
+
+    let red = 1 - rgb[RGB_INDEX.red] / 255;
+    let blue = rgb[RGB_INDEX.blue] / 255;
+    let avg = (red + blue) / 2;
+
+    return minTemp + Math.round(avg * (maxTemp - minTemp) / this.step) * this.step
   }
 
   set _value(value) {
@@ -184,7 +210,16 @@ export class LightController extends Controller {
         attr = "effect";
         break;
       case "color_temp":
-        attr = "kelvin";
+        let has_native_temp_support =
+          this.stateObj.attributes.supported_features & 2 ||
+          this.stateObj.attributes.supported_color_modes?.some(mode => ["color_temp"].includes(mode));
+
+        if (!has_native_temp_support) {
+          value = this.rgbFromColorTemp(value);
+          attr = "rgb_color"
+        } else {
+          attr = "kelvin";
+        }
         break;
       case "color_temp_mired":
         attr = "color_temp";
@@ -263,7 +298,7 @@ export class LightController extends Controller {
           return true;
         return false;
       case "color_temp":
-        if ("color_temp" in this.stateObj.attributes || support_temp)
+        if ("color_temp" in this.stateObj.attributes || support_temp || support_rgb)
           return true;
         return false;
       case "color_temp_mired":

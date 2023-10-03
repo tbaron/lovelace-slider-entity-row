@@ -1,7 +1,7 @@
 {
   "name": "slider-entity-row",
   "private": true,
-  "version": "17.3.0",
+  "version": "1.0.6",
   "type": "module",
   "description": "slider-entity-row =================",
   "scripts": {
